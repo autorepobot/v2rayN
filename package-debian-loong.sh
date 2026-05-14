@@ -128,7 +128,7 @@ install_dependencies() {
   <packageSources>
     <clear />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-    <add key="loongnix" value="https://nuget.loongnix.cn/v3/index.json" allowInsecureConnections="true" />
+    <add key="loongnix" value="https://lnuget.loongnix.cn/v3/index.json" allowInsecureConnections="true" />
   </packageSources>
 </configuration>
 EOF
