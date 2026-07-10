@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
- 
+
 VERSION_ARG=""
 WITH_CORE="both"
 FORCE_NETCORE=0
