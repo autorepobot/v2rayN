@@ -96,13 +96,13 @@ install_dependencies() {
   local install_ok=0
 
   if command -v dnf >/dev/null 2>&1; then
-    sudo dnf -y install rpm-build rpmdevtools curl unzip tar jq rsync dotnet-sdk-10.0 \
+    sudo dnf -y install rpm-build rpmdevtools clang curl unzip tar jq rsync dotnet-sdk-10.0 \
       && install_ok=1
   fi
 
   if [[ "$install_ok" -ne 1 ]]; then
     echo "Could not auto-install dependencies for '$OS_ID'. Make sure these are available:"
-    echo "dotnet-sdk 10.x, curl, unzip, tar, rsync, rpm, rpmdevtools, rpm-build (on Red Hat branch)"
+    echo "dotnet-sdk 10.x, curl, unzip, tar, rsync, rpm, rpmdevtools, clang, rpm-build (on Red Hat branch)"
     exit 1
   fi
 }
@@ -475,7 +475,7 @@ publish_binary() {
   dotnet clean "$PROJECT" -c Release
   rm -rf "$(dirname "$PROJECT")/bin/Release/net10.0" || true
   dotnet restore "$PROJECT"
-  dotnet publish "$PROJECT" -c Release -r "$rid" -p:PublishSingleFile=false -p:SelfContained=true
+  dotnet publish "$PROJECT" -c Release -r "$rid" -p:PublishSingleFile=false -p:SelfContained=true -p:PublishAot=true
 }
 
 write_spec_file() {
