@@ -1,40 +1,24 @@
-name: sign and upload release files
-
+name: publish GPG public key
 on:
   workflow_call:
     inputs:
       release_tag:
         required: true
         type: string
-      artifact_name:
-        required: true
-        type: string
-      file_pattern:
-        required: false
-        type: string
-        default: '**/*'
-      content_type:
-        required: false
-        type: string
-        default: application/octet-stream
     secrets:
       GPG_PRIVATE_KEY:
         required: true
-
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
 permissions:
   contents: write
-  actions: read
-
 jobs:
-  upload:
+  publish:
     runs-on: ubuntu-26.04
     steps:
-    - name: Download release artifact
-      uses: actions/download-artifact@v8
-      with:
-        name: ${{ inputs.artifact_name }}
-        path: dist
-
     - name: Import GPG private key
       shell: bash
       env:
@@ -43,34 +27,17 @@ jobs:
         set -euo pipefail
         install -m 700 -d ~/.gnupg
         printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
-
-    - name: Sign release files
+    - name: Export GPG public key
       shell: bash
       run: |
         set -euo pipefail
-        cd dist
-        shopt -s globstar nullglob
-        files=( ${{ inputs.file_pattern }} )
-        (( ${#files[@]} )) || { echo "No files matched: ${{ inputs.file_pattern }}"; exit 1; }
-        for f in "${files[@]}"; do
-          [[ -f "$f" ]] || continue
-          gpg --batch --yes --armor --detach-sign --output "$f.sig" "$f"
-        done
-
-    - name: Upload release files
-      uses: svenstaro/upload-release-action@v2
-      with:
-        file: dist/${{ inputs.file_pattern }}
-        tag: ${{ inputs.release_tag }}
-        file_glob: true
-        prerelease: true
-        overwrite: true
-
-    - name: Upload release signatures
-      uses: svenstaro/upload-release-action@v2
-      with:
-        file: dist/${{ inputs.file_pattern }}.sig
-        tag: ${{ inputs.release_tag }}
-        file_glob: true
-        prerelease: true
-        overwrite: true
+        fingerprint="$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')"
+        [[ -n "$fingerprint" ]] || { echo "No GPG secret key found."; exit 1; }
+        gpg --batch --armor --export "$fingerprint" > v2rayN-public-key.asc
+    - name: Upload GPG public key to release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        gh release upload "${{ inputs.release_tag }}" v2rayN-public-key.asc --clobber
