@@ -33,7 +33,12 @@ public class CoreAdminManager
     {
         StringBuilder sb = new();
         sb.AppendLine("#!/bin/bash");
-        var cmdLine = $"{fileName.AppendQuotes()} {string.Format(coreInfo.Arguments, Utils.GetBinConfigPath(configPath).AppendQuotes())}";
+        var configFilePath = Utils.GetBinConfigPath(configPath).AppendQuotes();
+        var environmentVars = coreInfo.Environment
+            .Select(kv => $"{kv.Key}={ShellQuote(string.Format(kv.Value ?? string.Empty, configFilePath))}")
+            .ToList();
+        var environmentArgs = environmentVars.Count > 0 ? $"env {string.Join(' ', environmentVars)} " : string.Empty;
+        var cmdLine = $"{environmentArgs}{fileName.AppendQuotes()} {string.Format(coreInfo.Arguments, configFilePath)}";
         sb.AppendLine($"exec sudo -S -- {cmdLine}");
         var shFilePath = await FileUtils.CreateLinuxShellFile("run_as_sudo.sh", sb.ToString(), true);
 
@@ -57,6 +62,12 @@ public class CoreAdminManager
 
         return procService;
     }
+
+    private static string ShellQuote(string value)
+    {
+        return $"'{value.Replace("'", "'\\''")}'";
+    }
+
 
     public async Task KillProcessAsLinuxSudo()
     {
