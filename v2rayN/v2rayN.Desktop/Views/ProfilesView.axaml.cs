@@ -393,14 +393,14 @@ public partial class ProfilesView : ReactiveUserControl<ProfilesViewModel>
                 }
             }
 
-        foreach (var c in lstProfiles.Columns)
-        {
-            if (c.Tag is not string tag) continue;
-            if (tag.StartsWith("to", StringComparison.CurrentCultureIgnoreCase))
-                c.IsVisible = _config.GuiItem.EnableStatistics;
-            else if (tag.Equals("IpInfo", StringComparison.CurrentCultureIgnoreCase))
-                c.IsVisible = _config.SpeedTestItem.IPAPIUrl.IsNotEmpty() && !_config.UiItem.HideColumnIpInfo;
-        }
+            foreach (var c in lstProfiles.Columns)
+            {
+                if (c.Tag is not string tag) continue;
+                if (tag.StartsWith("to", StringComparison.CurrentCultureIgnoreCase))
+                    c.IsVisible = _config.GuiItem.EnableStatistics;
+                else if (tag.Equals("IpInfo", StringComparison.CurrentCultureIgnoreCase))
+                    c.IsVisible = _config.SpeedTestItem.IPAPIUrl.IsNotEmpty() && !_config.UiItem.HideColumnIpInfo;
+            }
 
         }
         catch (Exception ex)
