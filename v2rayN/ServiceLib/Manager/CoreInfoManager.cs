@@ -90,6 +90,7 @@ public sealed class CoreInfoManager
         {
             ECoreType.v2rayN => preRelease,
             ECoreType.Xray => preRelease,
+            ECoreType.sing_box => preRelease,
             _ => false,
         };
     }
