@@ -5,6 +5,8 @@ namespace v2rayN.Desktop;
 
 public partial class App : Application
 {
+    private static CancellationTokenSource? _macOSRestoreCts;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -39,7 +41,7 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
-
+  
     #region MacOS Activation
 
     private void OnMacOSActivated(object? sender, ActivatedEventArgs args)
@@ -53,18 +55,26 @@ public partial class App : Application
         {
             return;
         }
-
+  
         var isMiniaturized = MacAppUtils.IsWindowMiniaturized(mainWindow);
 
         Dispatcher.UIThread.Post(() =>
         {
+            // Cancel any in-flight restore chain from a previous Reopen before starting a new one,
+            // so repeated Dock clicks don't queue up multiple overlapping Activate()/Focus() calls.
+            _macOSRestoreCts?.Cancel();
+            _macOSRestoreCts?.Dispose();
+            _macOSRestoreCts = null;
+  
             if (isMiniaturized)
             {
-                RestoreMacOSAccessoryPolicyAfterMiniaturize(mainWindow);
+                var cts = new CancellationTokenSource();
+                _macOSRestoreCts = cts;
+                RestoreMacOSAccessoryPolicyAfterMiniaturize(mainWindow, cts.Token);
                 mainWindow.ShowHideWindow(true);
                 return;
             }
-
+  
             if (!AppManager.Instance.Config.UiItem.MacOSShowInDock)
             {
                 MacAppUtils.SetActivationPolicyAccessory();
@@ -74,7 +84,7 @@ public partial class App : Application
         });
     }
 
-    private static void RestoreMacOSAccessoryPolicyAfterMiniaturize(MainWindow mainWindow)
+    private static void RestoreMacOSAccessoryPolicyAfterMiniaturize(MainWindow mainWindow, CancellationToken token)
     {
         if (AppManager.Instance.Config.UiItem.MacOSShowInDock)
         {
@@ -86,26 +96,63 @@ public partial class App : Application
             .Skip(1)
             .Where(state => state != WindowState.Minimized)
             .Take(1)
+            .TakeWhile(_ => !token.IsCancellationRequested)
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => QueueMacOSAccessoryPolicyRestore(mainWindow));
+            .Subscribe(_ => QueueMacOSAccessoryPolicyRestore(mainWindow, token));
     }
-
-    private static void QueueMacOSAccessoryPolicyRestore(MainWindow mainWindow)
+  
+    private static void QueueMacOSAccessoryPolicyRestore(MainWindow mainWindow, CancellationToken token, int attempt = 0)
     {
-        // AppKit may keep isMiniaturized set until the Dock restore animation finishes.
-        DispatcherTimer.RunOnce(() => RestoreMacOSAccessoryPolicy(mainWindow), TimeSpan.FromMilliseconds(300));
-    }
+        const int maxAttempts = 10; // ~10 * 300ms = 3s upper bound before giving up
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
 
+        // AppKit may keep isMiniaturized set until the Dock restore animation finishes.
+        DispatcherTimer.RunOnce(() =>
+        {
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (AppManager.Instance.Config.UiItem.MacOSShowInDock)
+            {
+                return;
+            }
+
+            if (MacAppUtils.IsWindowMiniaturized(mainWindow))
+            {
+                // Native state hasn't caught up yet; retry instead of silently giving up,
+                // but bail out after maxAttempts so we never retry forever.
+                if (attempt + 1 < maxAttempts)
+                {
+                    QueueMacOSAccessoryPolicyRestore(mainWindow, token, attempt + 1);
+                }
+                return;
+            }
+
+            RestoreMacOSAccessoryPolicy(mainWindow);
+        }, TimeSpan.FromMilliseconds(300));
+    }
+  
     private static void RestoreMacOSAccessoryPolicy(MainWindow mainWindow)
     {
         if (AppManager.Instance.Config.UiItem.MacOSShowInDock || MacAppUtils.IsWindowMiniaturized(mainWindow))
         {
             return;
         }
-
+  
         MacAppUtils.SetActivationPolicyAccessory();
-        mainWindow.Activate();
-        mainWindow.Focus();
+
+        // Only (re)activate here if the window isn't already the active/focused window,
+        // to avoid firing a second Activate()/Focus() right after ShowHideWindow() already did.
+        if (!mainWindow.IsActive)
+        {
+            mainWindow.Activate();
+            mainWindow.Focus();
+        }
     }
 
     #endregion MacOS Activation
